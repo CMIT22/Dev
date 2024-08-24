@@ -1,0 +1,351 @@
+
+Search and replace variables:
+
+[hostname]
+[radiusServerName]
+[dynAuthIP]
+[nameServerIP]
+[userName]
+[userNameSecretPassword]
+[mgmtIP]
+[mgmtNetMask]
+[mgmtGateway]
+[domainName]
+[webAuthVIP]
+[loggingHostIP]
+[radiusServerIP]
+[radiusSharedKey]
+[businessName]
+[mobilityGRP]
+[nativeVLANID]
+[countryCode]
+[visitorPSK]
+[siteID]
+[mgmtApUsername]
+[mgmtApPassword]
+[mgmtApSecretPassword]
+[SSID-Corp]
+[SSID-Visitor]
+
+-------------------------------------------------------------------------
+
+
+!
+version 17.6
+service tcp-keepalives-in
+service tcp-keepalives-out
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no platform punt-keepalive disable-kernel-core
+no platform punt-keepalive settings
+platform console serial
+!
+hostname [hostname]
+!
+boot-start-marker
+boot-end-marker
+!
+!
+!
+aaa new-model
+!
+!
+aaa group server radius RAD_AUTH_GRP
+ server name [RadiusServerName]
+!
+aaa authentication login default local
+aaa authentication login HTTP local
+aaa authentication dot1x DOT1X_METHOD group RAD_AUTH_GRP
+aaa authorization console
+aaa authorization exec default local 
+aaa authorization exec HTTP local 
+aaa authorization network AUTHOR_METHOD group RAD_AUTH_GRP 
+aaa accounting delay-start
+aaa accounting update newinfo periodic 2880
+aaa accounting identity ACC_METHOD start-stop group RAD_AUTH_GRP
+!
+!
+!
+!
+!
+aaa server radius dynamic-author
+ client [dynAuthIP]
+!
+!
+aaa session-id common
+no fips authorization-key
+!
+!
+!
+!
+ip name-server [nameServerIP]
+ip domain timeout 1
+ip domain name [domainName]
+login on-success log
+!
+!
+!
+!
+!
+!
+!
+parameter-map type webauth global
+ virtual-ip ipv4 [webAuthVIP]
+ webauth-http-enable
+!
+access-session mac-move deny
+password encryption aes
+!
+crypto pki trustpoint TP-self-signed-3700682967
+ enrollment selfsigned
+ subject-name cn=IOS-Self-Signed-Certificate-3700682967
+ revocation-check none
+ rsakeypair TP-self-signed-3700682967
+!
+!
+username [userName] privilege 15 secret [userNameSecretPassword]
+!
+redundancy
+ mode sso
+!
+!
+!
+!
+!
+!
+!
+interface GigabitEthernet0
+ ip address [mgmtIP] [mgmtNetMask]
+ no negotiation auto
+!
+no ip http server
+ip http authentication aaa login-authentication HTTP
+ip http authentication aaa exec-authorization HTTP
+ip http secure-server
+ip http secure-trustpoint CISCO_IDEVID_SUDI
+ip http client source-interface GigabitEthernet0
+ip forward-protocol nd
+ip tftp blocksize 8192
+ip route 0.0.0.0 0.0.0.0 [mgmtGateway]
+ip route 0.0.0.0 0.0.0.0 GigabitEthernet0 250
+ip dns server
+ip ssh source-interface GigabitEthernet0
+ip ssh version 2
+!
+!
+ip access-list extended VISITOR_REDIRECT_ACL
+ 10 remark --------------------> Deny HTTPS
+ 20 deny   tcp any any eq 8443
+ 30 deny   tcp any eq 8443 any
+ 40 remark --------------------> Deny DNS Access
+ 50 deny   udp any any eq domain
+ 60 deny   udp any eq domain any
+ 70 remark --------------------> Permit All
+ 80 permit ip any any
+ip access-list extended INTERNET_ONLY_ACL
+ 10 remark --------------------> Permit ICMP
+ 20 permit icmp any any
+ 30 remark --------------------> Permit DHCP Access
+ 40 permit udp any any eq bootps
+ 50 permit udp any any eq bootpc
+ 60 remark --------------------> Permit DNS Access
+ 70 permit udp any any eq domain
+ 80 permit udp any eq domain any
+ 90 remark --------------------> Deny RFC1918 Access
+ 100 deny   ip 10.0.0.0 0.255.255.255 10.0.0.0 0.255.255.255
+ 110 deny   ip 10.0.0.0 0.255.255.255 172.16.0.0 0.15.255.255
+ 120 deny   ip 10.0.0.0 0.255.255.255 192.168.0.0 0.0.255.255
+ 130 remark --------------------> Permit Internet Access
+ 140 permit ip any any
+!
+logging host [loggingHostIP]
+!
+!
+radius server [radiusServerName]
+ address ipv4 [radiusServerIP] auth-port 1812 acct-port 1813
+ key [radiusSharedKey]
+!
+!
+control-plane
+!
+banner exec ^C
+###############################################################################
+#                                                                             #
+#                         W  A  R  N  I  N  G                                 #
+#                         -------------------                                 #
+#                                                                             #
+#  You are entering a Private Network. Only approved [businessName] workers using       #
+#  valid log-in credentials are authorized beyond this point, subject to      #
+#  [businessName] Policies and contract terms. By accessing this network, you affirm    #
+#  that your system is equipped with active and current protective            #
+#  measures: Anti-Virus/Malware; OS Security updates and active Firewall.     #
+#  It is against [businessName] policy to store [businessName] Confidential or Regulated data on  #
+#  non-[businessName] systems. [businessName] reserves the right to actively log, monitor and     #
+#  disconnect any session not meeting these requirements or those that        #
+#  pose unwarranted risk to [businessName]'s network or systems.  If you are not an     #
+#  authorized user, cancel or exit immediately.                               #
+#                                                                             #
+###############################################################################
+^C
+!
+line con 0
+ stopbits 1
+line vty 0
+ length 0
+ transport input ssh
+line vty 1 4
+ transport input ssh
+line vty 5 50
+ transport input ssh
+!
+ntp server 1.ciscome.pool.ntp.org
+ntp server 0.ciscome.pool.ntp.org
+ntp server 2.ciscome.pool.ntp.org
+!
+!
+!
+!
+!
+wireless mobility group name [mobilityGRP]
+wireless aaa policy default-aaa-policy
+wireless cts-sxp profile default-sxp-profile
+wireless management interface GigabitEthernet0
+wireless profile ap packet-capture test1
+wireless profile airtime-fairness default-atf-policy 0
+wireless profile flex default-flex-profile
+ acl-policy INTERNET_ONLY_ACL
+ acl-policy VISITOR_REDIRECT_ACL
+  central-webauth
+ description "default flex profile"
+ ip http client proxy 0.0.0.0 0
+ native-vlan-id [nativeVLANID]
+wireless profile mesh default-mesh-profile
+ description "default mesh profile"
+wireless profile radio default-radio-profile
+ description "Preconfigured default radio profile"
+wireless profile policy [SSID-Corp]
+ aaa-override
+ accounting-list ACC_METHOD
+ no central association
+ no central dhcp
+ no central switching
+ description "Policy Profile for [SSID-Corp]"
+ dhcp-tlv-caching
+ http-tlv-caching
+ ipv4 dhcp required
+ service-policy input platinum-up
+ service-policy output platinum
+ session-timeout 64800
+ vlan 30
+ no shutdown
+wireless profile policy [[SSID-Visitor]]
+ aaa-override
+ accounting-list ACC_METHOD
+ autoqos mode guest
+ no central association
+ no central dhcp
+ no central switching
+ description "Policy Profile or [SSID-Visitor]"
+ dhcp-tlv-caching
+ http-tlv-caching
+ ipv4 dhcp required
+ service-policy input AutoQos-4.0-wlan-GT-SSID-Input-Policy
+ service-policy output AutoQos-4.0-wlan-GT-SSID-Output-Policy
+ session-timeout 14400
+ vlan 30
+ no shutdown
+wireless profile policy default-policy-profile
+ no central association
+ no central dhcp
+ no central switching
+ description "default policy profile"
+ dhcp-tlv-caching
+ no exclusionlist
+ http-tlv-caching
+ idle-timeout 43200
+ ipv4 flow monitor default-flow-monitor input
+ ipv4 flow monitor default-flow-monitor output
+ service-policy input platinum-up
+ service-policy output platinum
+ session-timeout 0
+ vlan 30
+ no shutdown
+wireless tag site default-site-tag
+ description "default site tag"
+ no local-site
+wireless tag policy [siteID]
+ wlan [SSID-Corp] policy [SSID-Corp]
+ wlan [SSID-Visitor] policy [SSID-Visitor]
+wireless tag policy default-policy-tag
+ description "default policy-tag"
+ wlan [SSID-Corp] policy [SSID-Corp]
+ wlan [SSID-Visitor] policy [SSID-Visitor]
+wireless tag rf [siteID]
+wireless tag rf default-rf-tag
+ description "default RF tag"
+wireless wps rogue ap init-timer 60
+wireless wps rogue ap rldp alarm-only monitor-ap-only
+wireless wps rogue security-level high
+wireless wps rogue rule Corp-Wlan-Infra priority 1
+ classify malicious state contained
+ condition infrastructure ssid
+ no shutdown
+wireless rf-network [siteID]
+wireless country [countryCode]
+wlan [SSID-Corp] 1 [SSID-Corp]
+ client association limit radio 100
+ mdns-sd-interface drop
+ no shutdown
+wlan [SSID-Visitor] 2 [SSID-Visitor]
+ no chd
+ client association limit radio 100
+ mdns-sd-interface drop
+ peer-blocking drop
+ no security ft adaptive
+ security wpa psk set-key ascii 0 [visitorPSK]
+ no security wpa akm dot1x
+ security wpa akm psk
+ security web-auth on-macfilter-failure
+ no shutdown
+ap dot11 24ghz rrm channel dca interval 4
+ap dot11 24ghz rrm channel cleanair-event
+ap dot11 24ghz rrm channel cleanair-event rogue-contribution
+ap dot11 24ghz edca-parameters optimized-voice
+ap dot11 24ghz rrm txpower max 11
+ap dot11 24ghz rrm txpower min 2
+ap dot11 24ghz rate RATE_12M mandatory
+ap dot11 24ghz rate RATE_11M disable
+ap dot11 24ghz rate RATE_1M disable
+ap dot11 24ghz rate RATE_24M supported
+ap dot11 24ghz rate RATE_2M disable
+ap dot11 24ghz rate RATE_5_5M disable
+ap dot11 24ghz rate RATE_6M disable
+ap dot11 24ghz rate RATE_9M disable
+ap dot11 5ghz rrm channel dca interval 24
+ap dot11 5ghz rrm channel cleanair-event
+ap dot11 5ghz rrm channel cleanair-event rogue-contribution
+ap dot11 5ghz rrm tpc tpcv1-chan-aware
+ap dot11 5ghz edca-parameters optimized-video-voice
+ap dot11 5ghz rrm channel dca chan-width 40
+ap dot11 5ghz rrm txpower min 8
+ap dot11 5ghz rate RATE_12M mandatory
+ap dot11 5ghz rate RATE_24M supported
+ap dot11 5ghz rate RATE_6M disable
+ap dot11 5ghz rate RATE_9M disable
+ap fra interval 24
+ap tri-radio
+ap tag-source-priority 2 source filter
+ap tag-source-priority 3 source ap
+ap location name [siteID]
+ tag policy [siteID]
+ tag rf [siteID]
+ap profile default-ap-profile
+ description "default ap profile"
+ mgmtuser username [mgmtApUsername] password 0 [mgmtApPassword] secret 0 [mgmtApSecretPassword]
+ packet-capture capture-test
+ rogue detection containment auto-rate
+ rogue detection min-rssi -80
+ rogue detection min-transient-time 300
+ rogue detection report-interval 30
+netconf-yang
+end
